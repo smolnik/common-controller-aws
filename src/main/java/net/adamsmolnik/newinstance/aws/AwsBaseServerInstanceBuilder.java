@@ -8,7 +8,6 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.PostConstruct;
-import javax.enterprise.context.Dependent;
 import javax.inject.Inject;
 import net.adamsmolnik.exceptions.ServiceException;
 import net.adamsmolnik.newinstance.ServerInstance;
@@ -33,7 +32,6 @@ import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
  * @author ASmolnik
  *
  */
-@Dependent
 public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R extends ServerInstance> implements ServerInstanceBuilder<T, R> {
 
     protected class ServerInstanceImpl implements ServerInstance {
@@ -86,7 +84,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
             instanceId = setupNewInstance(t).getInstanceId();
             waitUntilNewInstanceGetsReady(instanceId, 600);
             Instance newInstanceReady = fetchInstanceDetails(instanceId);
-            String newAppUrl = buildAppUrl(instanceId, t.getServiceContext());
+            String newAppUrl = buildAppUrl(newInstanceReady.getPublicIpAddress(), t.getServiceContext());
             sendHealthCheckUntilGetsHealthy(newAppUrl);
             return newInstance(newInstanceReady, t);
         } catch (Exception ex) {
@@ -139,7 +137,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
                 .withSecurityGroups("adamsmolnik.com")
                 .withIamInstanceProfile(
                         new IamInstanceProfileSpecification()
-                                .withArn("arn:aws:iam::542175458111:instance-profile/glassfish-40-x-java8-InstanceProfile-7HFPC4EC3Z0V"));
+                                .withArn("arn:aws:iam::542175458111:instance-profile/glassfish4-1-java8-InstanceProfile-1WX67989SDNGL"));
         RunInstancesResult result = ec2.runInstances(request);
         Instance instance = result.getReservation().getInstances().get(0);
 
