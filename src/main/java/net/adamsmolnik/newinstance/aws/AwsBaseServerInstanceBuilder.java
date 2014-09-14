@@ -40,9 +40,12 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
 
         private final String publicIpAddress;
 
+        private final String privateIpAddress;
+
         protected ServerInstanceImpl(Instance newInstance) {
             this.id = newInstance.getInstanceId();
             this.publicIpAddress = newInstance.getPublicIpAddress();
+            this.privateIpAddress = newInstance.getPrivateIpAddress();
         }
 
         @Override
@@ -53,6 +56,11 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
         @Override
         public String getPublicIpAddress() {
             return publicIpAddress;
+        }
+
+        @Override
+        public String getPrivateIpAddress() {
+            return privateIpAddress;
         }
 
         @Override
@@ -84,7 +92,9 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
             instanceId = setupNewInstance(t).getInstanceId();
             waitUntilNewInstanceGetsReady(instanceId, 600);
             Instance newInstanceReady = fetchInstanceDetails(instanceId);
-            String newAppUrl = buildAppUrl(newInstanceReady.getPublicIpAddress(), t.getServiceContext());
+            String newAppUrl = buildAppUrl(
+                    t.usePrivateOutboundAdresses() ? newInstanceReady.getPrivateIpAddress() : newInstanceReady.getPublicIpAddress(),
+                    t.getServiceContext());
             sendHealthCheckUntilGetsHealthy(newAppUrl);
             return newInstance(newInstanceReady, t);
         } catch (Exception ex) {
@@ -166,7 +176,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
     }
 
     protected String buildAppUrl(String newInstancePublicIpAddress, String serviceContext) {
-        return "http://" + newInstancePublicIpAddress + ":8080" + serviceContext;
+        return "http://" + newInstancePublicIpAddress + serviceContext;
     }
 
     protected void cleanup(String instanceId) {

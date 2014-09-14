@@ -93,7 +93,7 @@ public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuild
     private String buildAppUrlWithDns(String newInstancePublicIpAddress, FallbackSetupParamsView spv) {
         String serviceContext = spv.getServiceContext();
         Optional<String> dnsName = spv.getDnsName();
-        String serverUrl = dnsName.isPresent() ? dnsName.get() : (newInstancePublicIpAddress + ":8080");
+        String serverUrl = dnsName.isPresent() ? dnsName.get() : newInstancePublicIpAddress;
         return "http://" + serverUrl + serviceContext;
     }
 

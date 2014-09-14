@@ -76,9 +76,14 @@ public class SimpleSqsEndpoint implements QueueEndpoint {
                 for (Message message : messages) {
                     T request = requestMapper.apply(message.getBody());
                     tasksExecutor.submit(() -> {
-                        R response = requestProcessor.apply(request);
-                        if (queueOut.isPresent()) {
-                            sqs.sendMessage(new SendMessageRequest(queueOut.get(), json.toJson(response)));
+                        try {
+                            R response = requestProcessor.apply(request);
+                            if (queueOut.isPresent()) {
+                                sqs.sendMessage(new SendMessageRequest(queueOut.get(), json.toJson(response)));
+                            }
+                        } catch (Throwable t) {
+                            log.err(t);
+                            throw t;
                         }
                     });
                     sqs.deleteMessage(new DeleteMessageRequest(queueIn, message.getReceiptHandle()));
