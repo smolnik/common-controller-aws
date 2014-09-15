@@ -65,9 +65,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
 
         @Override
         public void scheduleCleanup(int delay, TimeUnit unit) {
-            scheduler.schedule(() -> {
-                cleanup(id);
-            }, delay, unit);
+            scheduler.schedule(() -> cleanup(id), delay, unit);
         }
 
     }
