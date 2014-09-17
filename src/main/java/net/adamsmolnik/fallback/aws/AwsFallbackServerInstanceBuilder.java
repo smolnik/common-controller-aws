@@ -33,9 +33,15 @@ public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuild
         }
 
         @Override
-        public void scheduleCleanup(int delay, TimeUnit unit) {
+        public void doScheduleCleanup(int delay, TimeUnit unit) {
             scheduler.schedule(() -> cleanup(getId(), elbName), delay, unit);
         }
+
+        @Override
+        public void doClose() {
+            scheduler.schedule(() -> cleanup(getId(), elbName), 15, TimeUnit.MINUTES);
+        }
+
     }
 
     @Inject

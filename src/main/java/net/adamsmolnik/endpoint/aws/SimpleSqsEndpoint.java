@@ -49,14 +49,14 @@ public class SimpleSqsEndpoint implements QueueEndpoint {
     }
 
     public final void handleString(Function<String, String> requestProcessor, String queueIn, Optional<String> queueOut) {
-        handle(requestProcessor, request -> request, queueIn, queueOut);
+        handle(requestProcessor, Function.identity(), queueIn, queueOut);
     }
 
     public final void handleVoid(Consumer<String> requestProcessor, String queueIn) {
         handle(request -> {
             requestProcessor.accept(request);
             return null;
-        }, request -> request, queueIn, Optional.empty());
+        }, Function.identity(), queueIn, Optional.empty());
     }
 
     public final <T, R> void handleJson(Function<T, R> requestProcessor, Class<T> requestClass, String queueIn, String queueOut) {

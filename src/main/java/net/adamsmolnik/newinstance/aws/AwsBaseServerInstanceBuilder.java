@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.annotation.PostConstruct;
 import javax.inject.Inject;
@@ -42,6 +43,8 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
 
         private final String privateIpAddress;
 
+        private final AtomicBoolean closeRequested = new AtomicBoolean();
+
         protected ServerInstanceImpl(Instance newInstance) {
             this.id = newInstance.getInstanceId();
             this.publicIpAddress = newInstance.getPublicIpAddress();
@@ -64,8 +67,27 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
         }
 
         @Override
-        public void scheduleCleanup(int delay, TimeUnit unit) {
+        public final void scheduleCleanup(int delay, TimeUnit unit) {
+            if (!closeRequested.getAndSet(true)) {
+                doScheduleCleanup(delay, unit);
+            }
+        }
+
+        @Override
+        public final void close() {
+            if (!closeRequested.getAndSet(true)) {
+                doClose();
+            }
+        }
+
+        protected void doScheduleCleanup(int delay, TimeUnit unit) {
             scheduler.schedule(() -> cleanup(id), delay, unit);
+        }
+
+        protected void doClose() {
+            if (!closeRequested.getAndSet(true)) {
+                scheduler.schedule(() -> cleanup(id), 15, TimeUnit.MINUTES);
+            }
         }
 
     }
@@ -90,9 +112,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
             instanceId = setupNewInstance(t).getInstanceId();
             waitUntilNewInstanceGetsReady(instanceId, 600);
             Instance newInstanceReady = fetchInstanceDetails(instanceId);
-            String newAppUrl = buildAppUrl(
-                    t.usePrivateOutboundAdresses() ? newInstanceReady.getPrivateIpAddress() : newInstanceReady.getPublicIpAddress(),
-                    t.getServiceContext());
+            String newAppUrl = buildAppUrl(newInstanceReady.getPublicIpAddress(), t.getServiceContext());
             sendHealthCheckUntilGetsHealthy(newAppUrl);
             return newInstance(newInstanceReady, t);
         } catch (Exception ex) {
@@ -113,6 +133,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
             try {
                 URL url = new URL(healthCheckUrl);
                 HttpURLConnection con = (HttpURLConnection) url.openConnection();
+                con.setConnectTimeout(2000);
                 con.setRequestMethod("GET");
                 con.connect();
                 int rc = con.getResponseCode();
@@ -135,8 +156,8 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
     }
 
     protected Instance setupNewInstance(SetupParamsView spv) {
-        RunInstancesRequest request = new RunInstancesRequest();
-        request.withImageId(spv.getImageId())
+        RunInstancesRequest request = new RunInstancesRequest()
+                .withImageId(spv.getImageId())
                 .withInstanceType(spv.getInstanceType())
                 .withMinCount(1)
                 .withMaxCount(1)
@@ -150,10 +171,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
         Instance instance = result.getReservation().getInstances().get(0);
 
         List<Tag> tags = new ArrayList<>();
-        Tag t = new Tag();
-        t.setKey("Name");
-        t.setValue(spv.getLabel());
-        tags.add(t);
+        tags.add(new Tag().withKey("Name").withValue(spv.getLabel()));
         CreateTagsRequest ctr = new CreateTagsRequest();
         ctr.setTags(tags);
         ctr.withResources(instance.getInstanceId());
