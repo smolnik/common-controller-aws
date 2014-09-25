@@ -1,5 +1,6 @@
 package net.adamsmolnik.endpoint.aws;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
@@ -9,6 +10,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Function;
+import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import javax.inject.Inject;
 import javax.inject.Singleton;
@@ -34,18 +36,23 @@ public class SimpleSqsEndpoint implements QueueEndpoint {
     @Inject
     private Log log;
 
-    private final Gson json = new Gson();
+    private Gson json;
 
-    private final ScheduledExecutorService poller = Executors.newSingleThreadScheduledExecutor();
+    private ScheduledExecutorService poller;
 
-    private final ExecutorService tasksExecutor = Executors.newFixedThreadPool(10);
+    private ExecutorService tasksExecutor;
 
-    private ScheduledFuture<?> pollerFuture;
+    private AmazonSQS sqs;
 
-    private final AmazonSQS sqs;
+    private List<ScheduledFuture<?>> pollerFutures;
 
-    public SimpleSqsEndpoint() {
+    @PostConstruct
+    public void init() {
+        json = new Gson();
+        poller = Executors.newSingleThreadScheduledExecutor();
+        tasksExecutor = Executors.newFixedThreadPool(10);
         sqs = new AmazonSQSClient();
+        pollerFutures = new ArrayList<ScheduledFuture<?>>();
     }
 
     public final void handleString(Function<String, String> requestProcessor, String queueIn, Optional<String> queueOut) {
@@ -64,7 +71,7 @@ public class SimpleSqsEndpoint implements QueueEndpoint {
     }
 
     public final <T, R> void handle(Function<T, R> requestProcessor, Function<String, T> requestMapper, String queueIn, Optional<String> queueOut) {
-        pollerFuture = poller.scheduleWithFixedDelay(() -> {
+        pollerFutures.add(poller.scheduleWithFixedDelay(() -> {
             try {
                 List<Message> messages = sqs.receiveMessage(new ReceiveMessageRequest().withQueueUrl(queueIn)).getMessages();
                 for (Message message : messages) {
@@ -86,14 +93,12 @@ public class SimpleSqsEndpoint implements QueueEndpoint {
                 log.err(ex);
             }
 
-        }, 0, 10, TimeUnit.SECONDS);
+        }, 0, 10, TimeUnit.SECONDS));
     }
 
     @PreDestroy
     public void shutdown() {
-        if (pollerFuture != null) {
-            pollerFuture.cancel(true);
-        }
+        pollerFutures.forEach((pollerFuture) -> pollerFuture.cancel(true));
         poller.shutdownNow();
         tasksExecutor.shutdownNow();
         sqs.shutdown();
