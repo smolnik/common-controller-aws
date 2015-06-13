@@ -20,8 +20,7 @@ import com.amazonaws.services.elasticloadbalancing.model.DeregisterInstancesFrom
 import com.amazonaws.services.elasticloadbalancing.model.RegisterInstancesWithLoadBalancerRequest;
 
 @Dependent
-public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuilder<FallbackSetupParamsView, FallbackServerInstance> implements
-        FallbackServerInstanceBuilder {
+public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuilder<FallbackSetupParamsView, FallbackServerInstance> implements FallbackServerInstanceBuilder {
 
     protected class FallbackServerInstanceImpl extends ServerInstanceImpl implements FallbackServerInstance {
 
@@ -33,8 +32,11 @@ public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuild
         }
 
         @Override
-        public void doScheduleCleanup(int delay, TimeUnit unit) {
-            scheduler.schedule(() -> cleanup(getId(), elbName), delay, unit);
+        public void doScheduleCleanup(int delay, TimeUnit unit, Runnable customCleanup) {
+            scheduler.schedule(() -> {
+                customCleanup.run();
+                cleanup(getId(), elbName);
+            }, delay, unit);
         }
 
         @Override
@@ -110,9 +112,8 @@ public class AwsFallbackServerInstanceBuilder extends AwsBaseServerInstanceBuild
 
     private void cleanup(String instanceId, Optional<String> elbName) {
         if (elbName.isPresent()) {
-            DeregisterInstancesFromLoadBalancerResult result = elb
-                    .deregisterInstancesFromLoadBalancer(new DeregisterInstancesFromLoadBalancerRequest().withLoadBalancerName(elbName.get())
-                            .withInstances(new com.amazonaws.services.elasticloadbalancing.model.Instance().withInstanceId(instanceId)));
+            DeregisterInstancesFromLoadBalancerResult result = elb.deregisterInstancesFromLoadBalancer(new DeregisterInstancesFromLoadBalancerRequest().withLoadBalancerName(elbName.get())
+                    .withInstances(new com.amazonaws.services.elasticloadbalancing.model.Instance().withInstanceId(instanceId)));
             log.info("Instance " + instanceId + " deregistered from elb " + elbName.get() + " with result " + result);
         }
         ec2.terminateInstances(new TerminateInstancesRequest().withInstanceIds(instanceId));

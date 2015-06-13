@@ -27,7 +27,8 @@ import com.google.gson.Gson;
 /**
  * @author ASmolnik
  * 
- * Not FOR production, just for educational purposes - messages can lost once an exception is raised
+ *         Not FOR production, just for educational purposes - messages can lost
+ *         once an exception is raised
  *
  */
 @Singleton

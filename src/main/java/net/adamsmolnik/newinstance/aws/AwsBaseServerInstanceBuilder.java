@@ -68,9 +68,9 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
         }
 
         @Override
-        public final void scheduleCleanup(int delay, TimeUnit unit) {
+        public final void scheduleCleanup(int delay, TimeUnit unit, Runnable customCleanup) {
             if (!closeRequested.getAndSet(true)) {
-                doScheduleCleanup(delay, unit);
+                doScheduleCleanup(delay, unit, customCleanup);
             }
         }
 
@@ -81,8 +81,11 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
             }
         }
 
-        protected void doScheduleCleanup(int delay, TimeUnit unit) {
-            scheduler.schedule(() -> cleanup(id), delay, unit);
+        protected void doScheduleCleanup(int delay, TimeUnit unit, Runnable customCleanup) {
+            scheduler.schedule(() -> {
+                customCleanup.run();
+                cleanup(id);
+            }, delay, unit);
         }
 
         protected void doClose() {
@@ -157,17 +160,9 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
     }
 
     protected Instance setupNewInstance(SetupParamsView spv) {
-        RunInstancesRequest request = new RunInstancesRequest()
-                .withImageId(spv.getImageId())
-                .withInstanceType(spv.getInstanceType())
-                .withMinCount(1)
-                .withMaxCount(1)
-                .withKeyName("adamsmolnik-net-key-pair")
-                .withSecurityGroupIds("sg-7be68f1e")
-                .withSecurityGroups("adamsmolnik.com")
-                .withIamInstanceProfile(
-                        new IamInstanceProfileSpecification()
-                                .withArn("arn:aws:iam::542175458111:instance-profile/glassfish4-1-java8-InstanceProfile-1WX67989SDNGL"));
+        RunInstancesRequest request = new RunInstancesRequest().withImageId(spv.getImageId()).withInstanceType(spv.getInstanceType()).withMinCount(1).withMaxCount(1)
+                .withKeyName("adamsmolnik-net-key-pair").withSecurityGroupIds("sg-7be68f1e").withSecurityGroups("adamsmolnik.com")
+                .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn("arn:aws:iam::542175458111:instance-profile/glassfish4-1-java8-InstanceProfile-1WX67989SDNGL"));
         RunInstancesResult result = ec2.runInstances(request);
         Instance instance = result.getReservation().getInstances().get(0);
 
@@ -182,8 +177,7 @@ public abstract class AwsBaseServerInstanceBuilder<T extends SetupParamsView, R 
 
     protected InstanceStatus waitUntilNewInstanceGetsReady(String instanceId, int timeoutSec) {
         return scheduler.scheduleAndWaitFor(() -> {
-            List<InstanceStatus> instanceStatuses = ec2.describeInstanceStatus(new DescribeInstanceStatusRequest().withInstanceIds(instanceId))
-                    .getInstanceStatuses();
+            List<InstanceStatus> instanceStatuses = ec2.describeInstanceStatus(new DescribeInstanceStatusRequest().withInstanceIds(instanceId)).getInstanceStatuses();
             if (!instanceStatuses.isEmpty()) {
                 InstanceStatus is = instanceStatuses.get(0);
                 return isReady(is.getInstanceStatus(), is.getSystemStatus()) ? Optional.of(is) : Optional.empty();
